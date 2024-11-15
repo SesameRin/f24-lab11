@@ -25,7 +25,7 @@ interface Props { }
  */
 class App extends React.Component<Props, GameState> {
   private initialized: boolean = false;
-
+  private history: GameState[] = [];
   /**
    * @param props has type Props
    */
@@ -34,8 +34,33 @@ class App extends React.Component<Props, GameState> {
     /**
      * state has type GameState as specified in the class inheritance.
      */
-    this.state = { cells: [] }
+    this.state = { cells: [], message: '' }
   }
+
+  // Save the current state to the history stack before updating it
+  saveStateToHistory() {
+    if (this.history.length === 0 || this.history[this.history.length - 1] !== this.state) {
+      this.history.push({ ...this.state });
+    }
+  }
+
+  /**
+   * Undo function to revert to the previous state and synchronize with the backend.
+   */
+  undo = async () => {
+    if (this.history.length > 0) {
+      const response = await fetch('/undo');
+      if (response.ok) {
+        const json = await response.json();
+        this.setState({ cells: json['cells'], message: json['message'] });
+        this.history.pop(); // Remove the last state from history
+      } else {
+        console.error('Undo failed on the server.');
+      }
+    } else {
+      console.warn('No moves to undo.');
+    }
+  };
 
   /**
    * Use arrow function, i.e., () => {} to create an async function,
@@ -43,9 +68,10 @@ class App extends React.Component<Props, GameState> {
    * just an issue of Javascript.
    */
   newGame = async () => {
+    this.saveStateToHistory();
     const response = await fetch('/newgame');
     const json = await response.json();
-    this.setState({ cells: json['cells'] });
+    this.setState({ cells: json['cells'], message: json['message'] });
   }
 
   /**
@@ -59,9 +85,12 @@ class App extends React.Component<Props, GameState> {
     return async (e) => {
       // prevent the default behavior on clicking a link; otherwise, it will jump to a new page.
       e.preventDefault();
+
+      this.saveStateToHistory();
+
       const response = await fetch(`/play?x=${x}&y=${y}`)
       const json = await response.json();
-      this.setState({ cells: json['cells'] });
+      this.setState({ cells: json['cells'], message: json['message'] });
     }
   }
 
@@ -118,10 +147,10 @@ class App extends React.Component<Props, GameState> {
         <div id="board">
           {this.state.cells.map((cell, i) => this.createCell(cell, i))}
         </div>
+        <div id="instructions">{this.state.message}</div>
         <div id="bottombar">
-          <button onClick={/* get the function, not call the function */this.newGame}>New Game</button>
-          {/* Exercise: implement Undo function */}
-          <button>Undo</button>
+          <button onClick={this.newGame}>New Game</button>
+          <button onClick={this.undo}>Undo</button>
         </div>
       </div>
     );
